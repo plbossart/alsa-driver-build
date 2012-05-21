@@ -830,8 +830,12 @@ static inline unsigned long msecs_to_jiffies(const unsigned int m)
 #endif
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0)
 #include <linux/moduleparam.h>
+#ifndef param_get_bint
+#define bint bool
+#endif
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 0)
 #undef module_param
 #define SNDRV_MODULE_TYPE_int	"i"
 #define SNDRV_MODULE_TYPE_bool	"i"
@@ -860,6 +864,7 @@ static inline unsigned long msecs_to_jiffies(const unsigned int m)
 	module_param_array_named(name, name, type, boot_devs_##name, perm)
 #endif /* < 2.6.5 */
 #endif /* < 2.6.10 */
+#endif /* < 3.2.0 */
 
 /* dump_stack hack */
 #ifndef CONFIG_HAVE_DUMP_STACK
@@ -2064,22 +2069,54 @@ request_irq_with_irqf_check(unsigned int irq, irq_handler_t handler,
 #define __printf(a,b)	/*nop*/
 #endif
 
+/* module_driver() wrapper */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0)
+#include <linux/device.h>
+#ifndef module_driver
+#define module_driver(__driver, __register, __unregister) \
+static int __init __driver##_init(void) { return __register(&(__driver)); } \
+module_init(__driver##_init); \
+static void __exit __driver##_exit(void) { __unregister(&(__driver)); } \
+module_exit(__driver##_exit);
+#endif
+#endif /* < 3.4 */
+
 /* module_platform_driver() wrapper */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 2, 0)
 #include <linux/platform_device.h>
 #ifndef module_platform_driver
 #define module_platform_driver(__platform_driver) \
-static int __init __platform_driver##_init(void) \
-{ \
-	return platform_driver_register(&(__platform_driver)); \
-} \
-module_init(__platform_driver##_init); \
-static void __exit __platform_driver##_exit(void) \
-{ \
-	platform_driver_unregister(&(__platform_driver)); \
-} \
-module_exit(__platform_driver##_exit);
+	module_driver(__platform_driver, platform_driver_register, \
+			platform_driver_unregister)
 #endif
 #endif /* < 3.2 */
+
+/* module_usb_driver() wrapper */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0)
+#define module_usb_driver(__usb_driver) \
+    module_driver(__usb_driver, usb_register, \
+			usb_deregister)
+#define module_i2c_driver(__i2c_driver) \
+	module_driver(__i2c_driver, i2c_add_driver, \
+			i2c_del_driver)
+#define module_spi_driver(__spi_driver) \
+	module_driver(__spi_driver, spi_register_driver, \
+			spi_unregister_driver)
+#endif /* < 3.3 */
+
+/* module_pci_driver() wrapper */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 4, 0)
+#include <linux/pci.h>
+#ifndef module_pci_driver
+#define module_pci_driver(__pci_driver) \
+	module_driver(__pci_driver, pci_register_driver, \
+		       pci_unregister_driver)
+#endif
+#endif /* < 3.4 */
+
+/* some old kernels define info(), and this breaks the build badly */
+#ifdef info
+#undef info
+#endif
 
 #endif /* __SOUND_LOCAL_DRIVER_H */

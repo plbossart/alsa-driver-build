@@ -5,7 +5,7 @@ dnl Copyright (c) by Jaroslav Kysela <perex@perex.cz>
 AC_PREREQ(2.59)
 AC_INIT(acore/sound.patch)
 AC_PREFIX_DEFAULT(/usr)
-CONFIG_SND_VERSION="1.0.24"
+CONFIG_SND_VERSION="1.0.25"
 
 dnl Checks for programs.
 AC_PROG_CC
@@ -1284,9 +1284,13 @@ if test $kvernum -gt 206027; then
 	checkarch="$ARCH"
 	;;
     esac
-    if test -d $CONFIG_SND_KERNELDIR/arch/$checkarch/include; then
-	KERNEL_INC="$KERNEL_INC -I$CONFIG_SND_KERNELDIR/arch/$checkarch/include"
-    fi
+    for d in $CONFIG_SND_KERNELDIR $CONFIG_SND_KERNELBUILD; do
+    	for i in arch/$checkarch/include arch/$checkarch/include/generated; do
+	    if test -d $d/$i; then
+	        KERNEL_INC="$KERNEL_INC -I$d/$i"
+	    fi
+	done
+    done
 fi
 
 if test -n "$mach_dir"; then
@@ -1513,10 +1517,13 @@ CHECK_KERNEL_HEADER(linux/irq.h)
 CHECK_KERNEL_HEADER(linux/threads.h)
 CHECK_KERNEL_HEADER(linux/rwsem.h)
 CHECK_KERNEL_HEADER(linux/gameport.h)
-CHECK_KERNEL_HEADER(linux/export.h)
+CHECK_KERNEL_HEADER(linux/export.h, [#include <linux/module.h>
+])
 CHECK_KERNEL_HEADER(media/v4l2-dev.h)
+CHECK_KERNEL_HEADER(media/v4l2-device.h)
 CHECK_KERNEL_HEADER(linux/devfs_fs_kernel.h)
 CHECK_KERNEL_HEADER(linux/highmem.h)
+CHECK_KERNEL_HEADER(linux/ratelimit.h)
 CHECK_KERNEL_HEADER(linux/workqueue.h)
 if test ! -f include/linux/workqueue.h; then
   if test "x$kversion.$kpatchlevel" = "x2.4" -a \
@@ -1580,6 +1587,8 @@ CHECK_KERNEL_HEADER(linux/dmi.h, [#include \"dmi_compat.h\"
 ])
 CHECK_KERNEL_HEADER(linux/bitrev.h)
 CHECK_KERNEL_HEADER(linux/hrtimer.h)
+CHECK_KERNEL_HEADER(linux/vgaarb.h)
+CHECK_KERNEL_HEADER(linux/vga_switcheroo.h)
 CHECK_KERNEL_HEADER(linux/gcd.h, [#include \"gcd_compat.h\"
 ])
 CHECK_KERNEL_HEADER(linux/gfp.h)
@@ -2803,6 +2812,15 @@ AC_MSG_CHECKING(for OSS/Free emulation)
 AC_ARG_WITH(oss,
   [  --with-oss=no,yes       driver will (not) be compiled with OSS/Free emulation],
   ossemul="$withval", ossemul="yes")
+if test "$ossemul" = "yes"; then
+  CHECK_KERNEL_CONFIG(CONFIG_SOUND_OSS_CORE, [OSS CORE])
+  if test $kvernum -ge 206028; then
+    if test "$CONFIG_SOUND_OSS_CORE" != "y"; then
+      echo "Didabling OSS-emulation as CONFIG_SOUND_OSS_CORE isn't set"
+      ossemul="no"
+    fi
+  fi
+fi
 if test "$ossemul" = "yes"; then
   CONFIG_SND_OSSEMUL="y"
   CONFIG_SND_MIXER_OSS="m"
